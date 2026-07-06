@@ -1,0 +1,28 @@
+# Build outputs
+Debug/
+Release/
+build/
+*.elf
+*.bin
+*.hex
+*.map
+*.list
+*.o
+*.d
+*.su
+
+# Eclipse / CubeIDE local metadata
+.metadata/
+.settings/
+.cproject
+.project
+.mxproject
+*.launch
+
+# macOS
+.DS_Store
+
+# Temporary / backup files
+*~
+*.bak
+
