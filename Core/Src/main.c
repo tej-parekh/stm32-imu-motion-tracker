@@ -32,6 +32,13 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 
+#define MPU6050_I2C_ADDR       (0x68 << 1)
+#define MPU6050_WHO_AM_I_REG   0x75
+#define MPU6050_WHO_AM_I_VALUE 0x68
+#define MPU6050_PWR_MGMT_1_REG  0x6B
+#define MPU6050_WAKE_VALUE      0x00
+#define MPU6050_ACCEL_XOUT_H_REG   0x3B
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -44,6 +51,8 @@
 
 I2C_HandleTypeDef hi2c1;
 
+UART_HandleTypeDef huart2;
+
 /* USER CODE BEGIN PV */
 
 /* USER CODE END PV */
@@ -52,6 +61,7 @@ I2C_HandleTypeDef hi2c1;
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_I2C1_Init(void);
+static void MX_USART2_UART_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -91,18 +101,135 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_I2C1_Init();
+  MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
 
-  uint8_t found_device = 0;
+  uint8_t who_am_i = 0;
 
-  for (uint8_t addr = 1; addr < 128; addr++)
+  HAL_StatusTypeDef status = HAL_I2C_Mem_Read(
+      &hi2c1,
+      MPU6050_I2C_ADDR,
+      MPU6050_WHO_AM_I_REG,
+      I2C_MEMADD_SIZE_8BIT,
+      &who_am_i,
+      1,
+      100
+  );
+
+
+  if (status == HAL_OK)
   {
-    if (HAL_I2C_IsDeviceReady(&hi2c1, addr << 1, 1, 10) == HAL_OK)
-    {
-      found_device = 1;
-      break;
-    }
+	  char uart_buffer[50];
+      int message_length = snprintf(
+          uart_buffer,
+          sizeof(uart_buffer),
+		  "NEW BOOT: WHO_AM_I = 0x%02X\r\n",
+          who_am_i
+      );
+
+      HAL_UART_Transmit(
+          &huart2,
+          (uint8_t *)uart_buffer,
+          message_length,
+          HAL_MAX_DELAY
+      );
   }
+
+  else
+  {
+      char error_message[] = "MPU-6050 read failed\r\n";
+
+      HAL_UART_Transmit(
+          &huart2,
+          (uint8_t *)error_message,
+          sizeof(error_message) - 1,
+          HAL_MAX_DELAY
+      );
+  }
+
+  uint8_t wake_value = MPU6050_WAKE_VALUE;
+
+  HAL_StatusTypeDef wake_status = HAL_I2C_Mem_Write(
+      &hi2c1,
+      MPU6050_I2C_ADDR,
+      MPU6050_PWR_MGMT_1_REG,
+      I2C_MEMADD_SIZE_8BIT,
+      &wake_value,
+      1,
+      100
+  );
+
+  if (wake_status == HAL_OK)
+  {
+      char wake_message[] = "MPU-6050 awake\r\n";
+
+      HAL_UART_Transmit(
+          &huart2,
+          (uint8_t *)wake_message,
+          sizeof(wake_message) - 1,
+          HAL_MAX_DELAY
+      );
+  }
+  else
+  {
+      char wake_error[] = "MPU-6050 wake failed\r\n";
+
+      HAL_UART_Transmit(
+          &huart2,
+          (uint8_t *)wake_error,
+          sizeof(wake_error) - 1,
+          HAL_MAX_DELAY
+      );
+  }
+
+  uint8_t accel_data[6];
+
+  HAL_StatusTypeDef accel_status = HAL_I2C_Mem_Read(
+      &hi2c1,
+      MPU6050_I2C_ADDR,
+      MPU6050_ACCEL_XOUT_H_REG,
+      I2C_MEMADD_SIZE_8BIT,
+      accel_data,
+      6,
+      100
+  );
+
+  if (accel_status == HAL_OK)
+  {
+	  int16_t accel_x = (int16_t)((accel_data[0] << 8) | accel_data[1]);
+	  int16_t accel_y = (int16_t)((accel_data[2] << 8) | accel_data[3]);
+	  int16_t accel_z = (int16_t)((accel_data[4] << 8) | accel_data[5]);
+
+	  char accel_buffer[100];
+
+	  int message_length = snprintf(
+	      accel_buffer,
+	      sizeof(accel_buffer),
+	      "Accel Raw: X=%d Y=%d Z=%d\r\n",
+	      accel_x,
+	      accel_y,
+	      accel_z
+	  );
+
+	  HAL_UART_Transmit(
+	      &huart2,
+	      (uint8_t *)accel_buffer,
+	      message_length,
+	      HAL_MAX_DELAY
+	  );
+  }
+  else
+  {
+      char accel_error[] = "Accel reading failed\r\n";
+
+      HAL_UART_Transmit(
+          &huart2,
+          (uint8_t *)accel_error,
+          sizeof(accel_error) - 1,
+          HAL_MAX_DELAY
+      );
+  }
+
 
   /* USER CODE END 2 */
 
@@ -113,19 +240,7 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-
     /* USER CODE END WHILE */
-
-	if (found_device)
-	{
-		BSP_LED_Toggle(LED2);
-	    HAL_Delay(100);
-	}
-	else
-	{
-	BSP_LED_Toggle(LED2);
-	HAL_Delay(1000);
-	}
 
     /* USER CODE BEGIN 3 */
   }
@@ -214,6 +329,39 @@ static void MX_I2C1_Init(void)
 }
 
 /**
+  * @brief USART2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_USART2_UART_Init(void)
+{
+
+  /* USER CODE BEGIN USART2_Init 0 */
+
+  /* USER CODE END USART2_Init 0 */
+
+  /* USER CODE BEGIN USART2_Init 1 */
+
+  /* USER CODE END USART2_Init 1 */
+  huart2.Instance = USART2;
+  huart2.Init.BaudRate = 115200;
+  huart2.Init.WordLength = UART_WORDLENGTH_8B;
+  huart2.Init.StopBits = UART_STOPBITS_1;
+  huart2.Init.Parity = UART_PARITY_NONE;
+  huart2.Init.Mode = UART_MODE_TX_RX;
+  huart2.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart2.Init.OverSampling = UART_OVERSAMPLING_16;
+  if (HAL_UART_Init(&huart2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN USART2_Init 2 */
+
+  /* USER CODE END USART2_Init 2 */
+
+}
+
+/**
   * @brief GPIO Initialization Function
   * @param None
   * @retval None
@@ -236,14 +384,6 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(B1_GPIO_Port, &GPIO_InitStruct);
-
-  /*Configure GPIO pins : USART_TX_Pin USART_RX_Pin */
-  GPIO_InitStruct.Pin = USART_TX_Pin|USART_RX_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
-  GPIO_InitStruct.Alternate = GPIO_AF7_USART2;
-  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
 
