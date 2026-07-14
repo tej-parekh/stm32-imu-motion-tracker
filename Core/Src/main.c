@@ -35,9 +35,15 @@
 #define MPU6050_I2C_ADDR       (0x68 << 1)
 #define MPU6050_WHO_AM_I_REG   0x75
 #define MPU6050_WHO_AM_I_VALUE 0x68
+
 #define MPU6050_PWR_MGMT_1_REG  0x6B
 #define MPU6050_WAKE_VALUE      0x00
+
 #define MPU6050_ACCEL_XOUT_H_REG   0x3B
+#define MPU6050_ACCEL_SENSITIVITY 16384.0f
+
+#define MPU6050_GYRO_XOUT_H_REG     0x43
+#define MPU6050_GYRO_SENSITIVITY    131.0f
 
 /* USER CODE END PD */
 
@@ -123,7 +129,7 @@ int main(void)
       int message_length = snprintf(
           uart_buffer,
           sizeof(uart_buffer),
-		  "NEW BOOT: WHO_AM_I = 0x%02X\r\n",
+		  "WHO_AM_I = 0x%02X\r\n",
           who_am_i
       );
 
@@ -182,55 +188,6 @@ int main(void)
       );
   }
 
-  uint8_t accel_data[6];
-
-  HAL_StatusTypeDef accel_status = HAL_I2C_Mem_Read(
-      &hi2c1,
-      MPU6050_I2C_ADDR,
-      MPU6050_ACCEL_XOUT_H_REG,
-      I2C_MEMADD_SIZE_8BIT,
-      accel_data,
-      6,
-      100
-  );
-
-  if (accel_status == HAL_OK)
-  {
-	  int16_t accel_x = (int16_t)((accel_data[0] << 8) | accel_data[1]);
-	  int16_t accel_y = (int16_t)((accel_data[2] << 8) | accel_data[3]);
-	  int16_t accel_z = (int16_t)((accel_data[4] << 8) | accel_data[5]);
-
-	  char accel_buffer[100];
-
-	  int message_length = snprintf(
-	      accel_buffer,
-	      sizeof(accel_buffer),
-	      "Accel Raw: X=%d Y=%d Z=%d\r\n",
-	      accel_x,
-	      accel_y,
-	      accel_z
-	  );
-
-	  HAL_UART_Transmit(
-	      &huart2,
-	      (uint8_t *)accel_buffer,
-	      message_length,
-	      HAL_MAX_DELAY
-	  );
-  }
-  else
-  {
-      char accel_error[] = "Accel reading failed\r\n";
-
-      HAL_UART_Transmit(
-          &huart2,
-          (uint8_t *)accel_error,
-          sizeof(accel_error) - 1,
-          HAL_MAX_DELAY
-      );
-  }
-
-
   /* USER CODE END 2 */
 
   /* Initialize leds */
@@ -241,6 +198,116 @@ int main(void)
   while (1)
   {
     /* USER CODE END WHILE */
+	  uint8_t accel_data[6];
+
+	  HAL_StatusTypeDef accel_status = HAL_I2C_Mem_Read(
+	      &hi2c1,
+	      MPU6050_I2C_ADDR,
+	      MPU6050_ACCEL_XOUT_H_REG,
+	      I2C_MEMADD_SIZE_8BIT,
+	      accel_data,
+	      6,
+	      100
+	  );
+
+	  if (accel_status == HAL_OK)
+	  {
+		  int16_t accel_x = (int16_t)((accel_data[0] << 8) | accel_data[1]);
+		  int16_t accel_y = (int16_t)((accel_data[2] << 8) | accel_data[3]);
+		  int16_t accel_z = (int16_t)((accel_data[4] << 8) | accel_data[5]);
+
+		  float accel_x_g = accel_x / MPU6050_ACCEL_SENSITIVITY;
+		  float accel_y_g = accel_y / MPU6050_ACCEL_SENSITIVITY;
+		  float accel_z_g = accel_z / MPU6050_ACCEL_SENSITIVITY;
+
+		  char accel_buffer[100];
+
+		  int message_length = snprintf(
+		      accel_buffer,
+		      sizeof(accel_buffer),
+		      "Accel (g): X=%.3f Y=%.3f Z=%.3f\r\n",
+		      accel_x_g,
+		      accel_y_g,
+		      accel_z_g
+		  );
+
+		  HAL_UART_Transmit(
+		      &huart2,
+		      (uint8_t *)accel_buffer,
+		      message_length,
+		      HAL_MAX_DELAY
+		  );
+	  }
+	  else
+	  {
+	      char accel_error[] = "Accel reading failed\r\n";
+
+	      HAL_UART_Transmit(
+	          &huart2,
+	          (uint8_t *)accel_error,
+	          sizeof(accel_error) - 1,
+	          HAL_MAX_DELAY
+	      );
+	  }
+
+	  uint8_t gyro_data[6];
+
+	  HAL_StatusTypeDef gyro_status = HAL_I2C_Mem_Read(
+	      &hi2c1,
+	      MPU6050_I2C_ADDR,
+	      MPU6050_GYRO_XOUT_H_REG,
+	      I2C_MEMADD_SIZE_8BIT,
+	      gyro_data,
+	      6,
+	      100
+	  );
+
+	  if (gyro_status == HAL_OK) {
+		  int16_t gyro_x_raw =
+		  	      (int16_t)((gyro_data[0] << 8) | gyro_data[1]);
+
+		  int16_t gyro_y_raw =
+		  	      (int16_t)((gyro_data[2] << 8) | gyro_data[3]);
+
+		  int16_t gyro_z_raw =
+		  	      (int16_t)((gyro_data[4] << 8) | gyro_data[5]);
+
+		  float gyro_x_dps = gyro_x_raw / MPU6050_GYRO_SENSITIVITY;
+		  float gyro_y_dps = gyro_y_raw / MPU6050_GYRO_SENSITIVITY;
+		  float gyro_z_dps = gyro_z_raw / MPU6050_GYRO_SENSITIVITY;
+
+		  char gyro_buffer[100];
+
+		  int gyro_message_length = snprintf(gyro_buffer,
+				  sizeof(gyro_buffer),
+				  "Gyro (deg/s): X=%.2f Y=%.2f Z=%.2f\r\n",
+				  gyro_x_dps,
+				  gyro_y_dps,
+				  gyro_z_dps
+		      	  );
+
+		  HAL_UART_Transmit(
+		          &huart2,
+		          (uint8_t *)gyro_buffer,
+		          gyro_message_length,
+		          HAL_MAX_DELAY
+		      	  );
+	  }
+
+	  else
+	  {
+	      char gyro_error[] = "Gyro reading failed\r\n";
+
+	      HAL_UART_Transmit(
+	          &huart2,
+	          (uint8_t *)gyro_error,
+	          sizeof(gyro_error) - 1,
+	          HAL_MAX_DELAY
+	      );
+	  }
+
+
+	  HAL_Delay(1000);
 
     /* USER CODE BEGIN 3 */
   }
