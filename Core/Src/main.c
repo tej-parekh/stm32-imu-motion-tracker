@@ -22,6 +22,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include <stdio.h>
+#include "mpu6050.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -31,19 +32,6 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-
-#define MPU6050_I2C_ADDR       (0x68 << 1)
-#define MPU6050_WHO_AM_I_REG   0x75
-#define MPU6050_WHO_AM_I_VALUE 0x68
-
-#define MPU6050_PWR_MGMT_1_REG  0x6B
-#define MPU6050_WAKE_VALUE      0x00
-
-#define MPU6050_ACCEL_XOUT_H_REG   0x3B
-#define MPU6050_ACCEL_SENSITIVITY 16384.0f
-
-#define MPU6050_GYRO_XOUT_H_REG     0x43
-#define MPU6050_GYRO_SENSITIVITY    131.0f
 
 /* USER CODE END PD */
 
@@ -57,9 +45,12 @@
 
 I2C_HandleTypeDef hi2c1;
 
+TIM_HandleTypeDef htim2;
+
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
+volatile uint8_t sample_due = 0;
 
 /* USER CODE END PV */
 
@@ -68,6 +59,7 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_USART2_UART_Init(void);
+static void MX_TIM2_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -105,45 +97,20 @@ int main(void)
   /* USER CODE END SysInit */
 
   /* Initialize all configured peripherals */
+
   MX_GPIO_Init();
   MX_I2C1_Init();
   MX_USART2_UART_Init();
+  MX_TIM2_Init();
+
   /* USER CODE BEGIN 2 */
+  MPU6050_Handle imu;
+  MPU6050_Measurement measurement;
 
-  uint8_t who_am_i = 0;
-
-  HAL_StatusTypeDef status = HAL_I2C_Mem_Read(
-      &hi2c1,
-      MPU6050_I2C_ADDR,
-      MPU6050_WHO_AM_I_REG,
-      I2C_MEMADD_SIZE_8BIT,
-      &who_am_i,
-      1,
-      100
-  );
-
-
-  if (status == HAL_OK)
+  // Driver initialization
+  if (MPU6050_Init(&imu, &hi2c1) != MPU6050_OK)
   {
-	  char uart_buffer[50];
-      int message_length = snprintf(
-          uart_buffer,
-          sizeof(uart_buffer),
-		  "WHO_AM_I = 0x%02X\r\n",
-          who_am_i
-      );
-
-      HAL_UART_Transmit(
-          &huart2,
-          (uint8_t *)uart_buffer,
-          message_length,
-          HAL_MAX_DELAY
-      );
-  }
-
-  else
-  {
-      char error_message[] = "MPU-6050 read failed\r\n";
+      char error_message[] = "MPU6050 init failed\r\n";
 
       HAL_UART_Transmit(
           &huart2,
@@ -151,41 +118,13 @@ int main(void)
           sizeof(error_message) - 1,
           HAL_MAX_DELAY
       );
+
+      Error_Handler();
   }
 
-  uint8_t wake_value = MPU6050_WAKE_VALUE;
-
-  HAL_StatusTypeDef wake_status = HAL_I2C_Mem_Write(
-      &hi2c1,
-      MPU6050_I2C_ADDR,
-      MPU6050_PWR_MGMT_1_REG,
-      I2C_MEMADD_SIZE_8BIT,
-      &wake_value,
-      1,
-      100
-  );
-
-  if (wake_status == HAL_OK)
+  if (HAL_TIM_Base_Start_IT(&htim2) != HAL_OK)
   {
-      char wake_message[] = "MPU-6050 awake\r\n";
-
-      HAL_UART_Transmit(
-          &huart2,
-          (uint8_t *)wake_message,
-          sizeof(wake_message) - 1,
-          HAL_MAX_DELAY
-      );
-  }
-  else
-  {
-      char wake_error[] = "MPU-6050 wake failed\r\n";
-
-      HAL_UART_Transmit(
-          &huart2,
-          (uint8_t *)wake_error,
-          sizeof(wake_error) - 1,
-          HAL_MAX_DELAY
-      );
+      Error_Handler();
   }
 
   /* USER CODE END 2 */
@@ -195,123 +134,81 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+  uint8_t print_counter = 0;
+  uint32_t sample_count = 0;
+  uint32_t last_report_ms = HAL_GetTick();
+
   while (1)
   {
-    /* USER CODE END WHILE */
-	  uint8_t accel_data[6];
+      /* USER CODE END WHILE */
 
-	  HAL_StatusTypeDef accel_status = HAL_I2C_Mem_Read(
-	      &hi2c1,
-	      MPU6050_I2C_ADDR,
-	      MPU6050_ACCEL_XOUT_H_REG,
-	      I2C_MEMADD_SIZE_8BIT,
-	      accel_data,
-	      6,
-	      100
-	  );
+      /* USER CODE BEGIN 3 */
 
-	  if (accel_status == HAL_OK)
+	  if (sample_due)
 	  {
-		  int16_t accel_x = (int16_t)((accel_data[0] << 8) | accel_data[1]);
-		  int16_t accel_y = (int16_t)((accel_data[2] << 8) | accel_data[3]);
-		  int16_t accel_z = (int16_t)((accel_data[4] << 8) | accel_data[5]);
+	      sample_due = 0;
 
-		  float accel_x_g = accel_x / MPU6050_ACCEL_SENSITIVITY;
-		  float accel_y_g = accel_y / MPU6050_ACCEL_SENSITIVITY;
-		  float accel_z_g = accel_z / MPU6050_ACCEL_SENSITIVITY;
+	      if (MPU6050_ReadAll(&imu, &measurement) == MPU6050_OK)
+	      {
+	          print_counter++;
 
-		  char accel_buffer[100];
+	          if (print_counter >= 10)
+	          {
+	              print_counter = 0;
 
-		  int message_length = snprintf(
-		      accel_buffer,
-		      sizeof(accel_buffer),
-		      "Accel (g): X=%.3f Y=%.3f Z=%.3f\r\n",
-		      accel_x_g,
-		      accel_y_g,
-		      accel_z_g
-		  );
+	              char uart_buffer[150];
 
-		  HAL_UART_Transmit(
-		      &huart2,
-		      (uint8_t *)accel_buffer,
-		      message_length,
-		      HAL_MAX_DELAY
-		  );
-	  }
-	  else
-	  {
-	      char accel_error[] = "Accel reading failed\r\n";
+	              int message_length = snprintf(
+	                  uart_buffer,
+	                  sizeof(uart_buffer),
+	                  "Accel (g): X=%.3f Y=%.3f Z=%.3f | "
+	                  "Gyro (deg/s): X=%.2f Y=%.2f Z=%.2f\r\n",
+	                  measurement.accel_x_g,
+	                  measurement.accel_y_g,
+	                  measurement.accel_z_g,
+	                  measurement.gyro_x_dps,
+	                  measurement.gyro_y_dps,
+	                  measurement.gyro_z_dps
+	              );
 
-	      HAL_UART_Transmit(
-	          &huart2,
-	          (uint8_t *)accel_error,
-	          sizeof(accel_error) - 1,
-	          HAL_MAX_DELAY
-	      );
-	  }
+	              HAL_UART_Transmit(
+	                  &huart2,
+	                  (uint8_t *)uart_buffer,
+	                  message_length,
+	                  HAL_MAX_DELAY
+	              );
+	          }
+	      }
 
-	  uint8_t gyro_data[6];
+	      sample_count++;
 
-	  HAL_StatusTypeDef gyro_status = HAL_I2C_Mem_Read(
-	      &hi2c1,
-	      MPU6050_I2C_ADDR,
-	      MPU6050_GYRO_XOUT_H_REG,
-	      I2C_MEMADD_SIZE_8BIT,
-	      gyro_data,
-	      6,
-	      100
-	  );
+	      uint32_t now_ms = HAL_GetTick();
 
-	  if (gyro_status == HAL_OK) {
-		  int16_t gyro_x_raw =
-		  	      (int16_t)((gyro_data[0] << 8) | gyro_data[1]);
+	      if (now_ms - last_report_ms >= 1000)
+	      {
+	          char rate_buffer[64];
 
-		  int16_t gyro_y_raw =
-		  	      (int16_t)((gyro_data[2] << 8) | gyro_data[3]);
+	          int length = snprintf(
+	              rate_buffer,
+	              sizeof(rate_buffer),
+	              "Samples in last second: %lu\r\n",
+	              sample_count
+	          );
 
-		  int16_t gyro_z_raw =
-		  	      (int16_t)((gyro_data[4] << 8) | gyro_data[5]);
+	          HAL_UART_Transmit(
+	              &huart2,
+	              (uint8_t *)rate_buffer,
+	              length,
+	              HAL_MAX_DELAY
+	          );
 
-		  float gyro_x_dps = gyro_x_raw / MPU6050_GYRO_SENSITIVITY;
-		  float gyro_y_dps = gyro_y_raw / MPU6050_GYRO_SENSITIVITY;
-		  float gyro_z_dps = gyro_z_raw / MPU6050_GYRO_SENSITIVITY;
-
-		  char gyro_buffer[100];
-
-		  int gyro_message_length = snprintf(gyro_buffer,
-				  sizeof(gyro_buffer),
-				  "Gyro (deg/s): X=%.2f Y=%.2f Z=%.2f\r\n",
-				  gyro_x_dps,
-				  gyro_y_dps,
-				  gyro_z_dps
-		      	  );
-
-		  HAL_UART_Transmit(
-		          &huart2,
-		          (uint8_t *)gyro_buffer,
-		          gyro_message_length,
-		          HAL_MAX_DELAY
-		      	  );
+	          sample_count = 0;
+	          last_report_ms = now_ms;
+	      }
 	  }
 
-	  else
-	  {
-	      char gyro_error[] = "Gyro reading failed\r\n";
-
-	      HAL_UART_Transmit(
-	          &huart2,
-	          (uint8_t *)gyro_error,
-	          sizeof(gyro_error) - 1,
-	          HAL_MAX_DELAY
-	      );
-	  }
-
-
-	  HAL_Delay(1000);
-
-    /* USER CODE BEGIN 3 */
+      /* USER CODE END 3 */
   }
-  /* USER CODE END 3 */
 }
 
 /**
@@ -396,6 +293,51 @@ static void MX_I2C1_Init(void)
 }
 
 /**
+  * @brief TIM2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM2_Init(void)
+{
+
+  /* USER CODE BEGIN TIM2_Init 0 */
+
+  /* USER CODE END TIM2_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  /* USER CODE BEGIN TIM2_Init 1 */
+
+  /* USER CODE END TIM2_Init 1 */
+  htim2.Instance = TIM2;
+  htim2.Init.Prescaler = 8399;
+  htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim2.Init.Period = 99;
+  htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim2, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim2, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM2_Init 2 */
+
+  /* USER CODE END TIM2_Init 2 */
+
+}
+
+/**
   * @brief USART2 Initialization Function
   * @param None
   * @retval None
@@ -458,6 +400,14 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+    if (htim->Instance == TIM2)
+    {
+        sample_due = 1;
+    }
+}
 
 /* USER CODE END 4 */
 
