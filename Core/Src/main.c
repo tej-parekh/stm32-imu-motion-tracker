@@ -134,9 +134,7 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  uint8_t print_counter = 0;
-  uint32_t sample_count = 0;
-  uint32_t last_report_ms = HAL_GetTick();
+  uint32_t sample_index = 0;
 
   while (1)
   {
@@ -144,68 +142,54 @@ int main(void)
 
       /* USER CODE BEGIN 3 */
 
-	  if (sample_due)
-	  {
-	      sample_due = 0;
+      if (sample_due)
+      {
+          sample_due = 0;
 
-	      if (MPU6050_ReadAll(&imu, &measurement) == MPU6050_OK)
-	      {
-	          print_counter++;
+          if (MPU6050_ReadAll(&imu, &measurement) == MPU6050_OK)
+          {
+              char uart_buffer[220];
 
-	          if (print_counter >= 10)
-	          {
-	              print_counter = 0;
+              uint32_t timestamp_ms = HAL_GetTick();
 
-	              char uart_buffer[150];
+              int message_length = snprintf(
+                  uart_buffer,
+                  sizeof(uart_buffer),
+                  "%lu,%lu,"
+                  "%d,%d,%d,"
+                  "%d,%d,%d,"
+                  "%.5f,%.5f,%.5f,"
+                  "%.5f,%.5f,%.5f\r\n",
+                  sample_index,
+                  timestamp_ms,
+                  measurement.accel_x_raw,
+                  measurement.accel_y_raw,
+                  measurement.accel_z_raw,
+                  measurement.gyro_x_raw,
+                  measurement.gyro_y_raw,
+                  measurement.gyro_z_raw,
+                  measurement.accel_x_g,
+                  measurement.accel_y_g,
+                  measurement.accel_z_g,
+                  measurement.gyro_x_dps,
+                  measurement.gyro_y_dps,
+                  measurement.gyro_z_dps
+              );
 
-	              int message_length = snprintf(
-	                  uart_buffer,
-	                  sizeof(uart_buffer),
-	                  "Accel (g): X=%.3f Y=%.3f Z=%.3f | "
-	                  "Gyro (deg/s): X=%.2f Y=%.2f Z=%.2f\r\n",
-	                  measurement.accel_x_g,
-	                  measurement.accel_y_g,
-	                  measurement.accel_z_g,
-	                  measurement.gyro_x_dps,
-	                  measurement.gyro_y_dps,
-	                  measurement.gyro_z_dps
-	              );
+              if (message_length > 0 &&
+                  message_length < sizeof(uart_buffer))
+              {
+                  HAL_UART_Transmit(
+                      &huart2,
+                      (uint8_t *)uart_buffer,
+                      message_length,
+                      HAL_MAX_DELAY
+                  );
+              }
 
-	              HAL_UART_Transmit(
-	                  &huart2,
-	                  (uint8_t *)uart_buffer,
-	                  message_length,
-	                  HAL_MAX_DELAY
-	              );
-	          }
-	      }
-
-	      sample_count++;
-
-	      uint32_t now_ms = HAL_GetTick();
-
-	      if (now_ms - last_report_ms >= 1000)
-	      {
-	          char rate_buffer[64];
-
-	          int length = snprintf(
-	              rate_buffer,
-	              sizeof(rate_buffer),
-	              "Samples in last second: %lu\r\n",
-	              sample_count
-	          );
-
-	          HAL_UART_Transmit(
-	              &huart2,
-	              (uint8_t *)rate_buffer,
-	              length,
-	              HAL_MAX_DELAY
-	          );
-
-	          sample_count = 0;
-	          last_report_ms = now_ms;
-	      }
-	  }
+              sample_index++;
+          }
+      }
 
       /* USER CODE END 3 */
   }
@@ -353,7 +337,7 @@ static void MX_USART2_UART_Init(void)
 
   /* USER CODE END USART2_Init 1 */
   huart2.Instance = USART2;
-  huart2.Init.BaudRate = 115200;
+  huart2.Init.BaudRate = 230400;
   huart2.Init.WordLength = UART_WORDLENGTH_8B;
   huart2.Init.StopBits = UART_STOPBITS_1;
   huart2.Init.Parity = UART_PARITY_NONE;

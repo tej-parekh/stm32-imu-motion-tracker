@@ -8,7 +8,18 @@
 #define MPU6050_PWR_MGMT_1_REG        0x6B
 #define MPU6050_ACCEL_XOUT_H_REG      0x3B
 
-#define MPU6050_ACCEL_SENSITIVITY     16384.0f
+#define MPU6050_ACCEL_BIAS_X          1511.9f
+#define MPU6050_ACCEL_BIAS_Y          23.3f
+#define MPU6050_ACCEL_BIAS_Z         -4755.1f
+
+#define MPU6050_GYRO_BIAS_X          -77.8f
+#define MPU6050_GYRO_BIAS_Y          -183.8f
+#define MPU6050_GYRO_BIAS_Z          -280.9f
+
+#define MPU6050_ACCEL_SENSITIVITY_X   16295.7f
+#define MPU6050_ACCEL_SENSITIVITY_Y   16302.4f
+#define MPU6050_ACCEL_SENSITIVITY_Z   16829.5f
+
 #define MPU6050_GYRO_SENSITIVITY      131.0f
 
 #define MPU6050_MEASUREMENT_SIZE  14
@@ -23,9 +34,23 @@ MPU6050_Status MPU6050_Init(
     I2C_HandleTypeDef *i2c_handle
 )
 {
-    imu->i2c_handle = i2c_handle;
-    imu->accel_sensitivity = MPU6050_ACCEL_SENSITIVITY;
-    imu->gyro_sensitivity = MPU6050_GYRO_SENSITIVITY;
+	imu->i2c_handle = i2c_handle;
+
+	imu->accel_bias_x = MPU6050_ACCEL_BIAS_X;
+	imu->accel_bias_y = MPU6050_ACCEL_BIAS_Y;
+	imu->accel_bias_z = MPU6050_ACCEL_BIAS_Z;
+
+	imu->accel_sensitivity_x = MPU6050_ACCEL_SENSITIVITY_X;
+	imu->accel_sensitivity_y = MPU6050_ACCEL_SENSITIVITY_Y;
+	imu->accel_sensitivity_z = MPU6050_ACCEL_SENSITIVITY_Z;
+
+	imu->gyro_bias_x = MPU6050_GYRO_BIAS_X;
+	imu->gyro_bias_y = MPU6050_GYRO_BIAS_Y;
+	imu->gyro_bias_z = MPU6050_GYRO_BIAS_Z;
+
+	imu->gyro_sensitivity = 131.0f;
+
+	imu->gyro_sensitivity = MPU6050_GYRO_SENSITIVITY;
 
     uint8_t who_am_i = 0;
 
@@ -63,6 +88,7 @@ MPU6050_Status MPU6050_Init(
         return MPU6050_ERROR;
     }
 
+
     // Gyro settings
 
     uint8_t gyro_config = 0x00;
@@ -95,6 +121,25 @@ MPU6050_Status MPU6050_Init(
     );
 
     if (status != HAL_OK)
+    {
+        return MPU6050_ERROR;
+    }
+
+    // Debugging read back
+
+    uint8_t accel_config_readback = 0;
+
+    status = HAL_I2C_Mem_Read(
+        imu->i2c_handle,
+        MPU6050_I2C_ADDR,
+        MPU6050_ACCEL_CONFIG_REG,
+        I2C_MEMADD_SIZE_8BIT,
+        &accel_config_readback,
+        1,
+        100
+    );
+
+    if (status != HAL_OK || accel_config_readback != accel_config)
     {
         return MPU6050_ERROR;
     }
@@ -165,29 +210,43 @@ MPU6050_Status MPU6050_ReadAll(
     int16_t accel_y_raw = (data[2] << 8 | data[3]);
     int16_t accel_z_raw = (data[4] << 8 | data[5]);
 
+    measurement->accel_x_raw = accel_x_raw;
+    measurement->accel_y_raw = accel_y_raw;
+    measurement->accel_z_raw = accel_z_raw;
+
     // Omit temperature
 
     int16_t gyro_x_raw = (data[8] << 8 | data[9]);
     int16_t gyro_y_raw = (data[10] << 8 | data[11]);
     int16_t gyro_z_raw = (data[12] << 8 | data[13]);
 
+    measurement->gyro_x_raw = gyro_x_raw;
+    measurement->gyro_y_raw = gyro_y_raw;
+    measurement->gyro_z_raw = gyro_z_raw;
+
     measurement->accel_x_g =
-        accel_x_raw / imu->accel_sensitivity;
+        (accel_x_raw - imu->accel_bias_x)
+        / imu->accel_sensitivity_x;
 
     measurement->accel_y_g =
-        accel_y_raw / imu->accel_sensitivity;
+        (accel_y_raw - imu->accel_bias_y)
+        / imu->accel_sensitivity_y;
 
     measurement->accel_z_g =
-        accel_z_raw / imu->accel_sensitivity;
+        (accel_z_raw - imu->accel_bias_z)
+        / imu->accel_sensitivity_z;
 
     measurement->gyro_x_dps =
-        gyro_x_raw / imu->gyro_sensitivity;
+        ((float)measurement->gyro_x_raw - imu->gyro_bias_x)
+        / imu->gyro_sensitivity;
 
     measurement->gyro_y_dps =
-        gyro_y_raw / imu->gyro_sensitivity;
+        ((float)measurement->gyro_y_raw - imu->gyro_bias_y)
+        / imu->gyro_sensitivity;
 
     measurement->gyro_z_dps =
-        gyro_z_raw / imu->gyro_sensitivity;
+        ((float)measurement->gyro_z_raw - imu->gyro_bias_z)
+        / imu->gyro_sensitivity;
 
     return MPU6050_OK;
 }
