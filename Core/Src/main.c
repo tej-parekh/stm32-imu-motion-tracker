@@ -23,6 +23,8 @@
 /* USER CODE BEGIN Includes */
 #include <stdio.h>
 #include "mpu6050.h"
+#include <math.h>
+#include "angle_kalman.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -32,7 +34,13 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+#define KALMAN_Q_ANGLE                  0.001f
+#define KALMAN_Q_BIAS                   0.00001f
+#define KALMAN_R_MEASURE                0.03f
+#define KALMAN_ACCEL_REJECTION_GAIN     10000.0f
 
+#define SAMPLE_PERIOD_S                 0.01f
+#define RAD_TO_DEG                      57.2957795f
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -106,6 +114,10 @@ int main(void)
   /* USER CODE BEGIN 2 */
   MPU6050_Handle imu;
   MPU6050_Measurement measurement;
+  AngleKalmanFilter roll_filter;
+  AngleKalmanFilter pitch_filter;
+
+  uint8_t kalman_initialized = 0;
 
   // Driver initialization
   if (MPU6050_Init(&imu, &hi2c1) != MPU6050_OK)
@@ -148,7 +160,76 @@ int main(void)
 
           if (MPU6050_ReadAll(&imu, &measurement) == MPU6050_OK)
           {
-              char uart_buffer[220];
+        	  float ax_g = measurement.accel_x_g;
+        	  float ay_g = measurement.accel_y_g;
+        	  float az_g = measurement.accel_z_g;
+
+        	  float roll_acc_deg =
+        	      atan2f(ay_g, az_g) * RAD_TO_DEG;
+
+        	  float pitch_acc_deg =
+        	      atan2f(
+        	          -ax_g,
+        	          sqrtf(ay_g * ay_g + az_g * az_g)
+        	      ) * RAD_TO_DEG;
+
+        	  float accel_magnitude_g =
+        	      sqrtf(
+        	          ax_g * ax_g
+        	          + ay_g * ay_g
+        	          + az_g * az_g
+        	      );
+
+        	  float roll_kf_deg;
+        	  float pitch_kf_deg;
+
+        	  if (!kalman_initialized)
+        	  {
+        	      AngleKalman_Init(
+        	          &roll_filter,
+        	          roll_acc_deg,
+        	          KALMAN_Q_ANGLE,
+        	          KALMAN_Q_BIAS,
+        	          KALMAN_R_MEASURE,
+        	          KALMAN_ACCEL_REJECTION_GAIN
+        	      );
+
+        	      AngleKalman_Init(
+        	          &pitch_filter,
+        	          pitch_acc_deg,
+        	          KALMAN_Q_ANGLE,
+        	          KALMAN_Q_BIAS,
+        	          KALMAN_R_MEASURE,
+        	          KALMAN_ACCEL_REJECTION_GAIN
+        	      );
+
+        	      roll_kf_deg = roll_acc_deg;
+        	      pitch_kf_deg = pitch_acc_deg;
+
+        	      kalman_initialized = 1;
+        	  }
+        	  else
+        	  {
+        	      roll_kf_deg = AngleKalman_Update(
+        	          &roll_filter,
+        	          roll_acc_deg,
+        	          measurement.gyro_x_dps,
+        	          accel_magnitude_g,
+        	          SAMPLE_PERIOD_S
+        	      );
+
+        	      pitch_kf_deg = AngleKalman_Update(
+        	          &pitch_filter,
+        	          pitch_acc_deg,
+        	          measurement.gyro_y_dps,
+        	          accel_magnitude_g,
+        	          SAMPLE_PERIOD_S
+        	      );
+        	  }
+
+        	  // UART sending
+
+              char uart_buffer[280];
 
               uint32_t timestamp_ms = HAL_GetTick();
 
@@ -159,7 +240,9 @@ int main(void)
                   "%d,%d,%d,"
                   "%d,%d,%d,"
                   "%.5f,%.5f,%.5f,"
-                  "%.5f,%.5f,%.5f\r\n",
+				  "%.5f,%.5f,%.5f,"
+				  "%.5f,%.5f,%.5f,"
+				  "%.5f,%.5f\r\n",
                   sample_index,
                   timestamp_ms,
                   measurement.accel_x_raw,
@@ -173,7 +256,12 @@ int main(void)
                   measurement.accel_z_g,
                   measurement.gyro_x_dps,
                   measurement.gyro_y_dps,
-                  measurement.gyro_z_dps
+                  measurement.gyro_z_dps,
+				  roll_acc_deg,
+				  pitch_acc_deg,
+				  accel_magnitude_g,
+				  roll_kf_deg,
+				  pitch_kf_deg
               );
 
               if (message_length > 0 &&
