@@ -21,6 +21,10 @@ void AngleKalman_Init(
     filter->q_bias = q_bias;
     filter->r_measure = r_measure;
     filter->accel_rejection_gain = accel_rejection_gain;
+
+    filter->r_current = r_measure;
+    filter->k_angle = 0.0f;
+    filter->k_bias = 0.0f;
 }
 
 float AngleKalman_Update(
@@ -79,6 +83,10 @@ float AngleKalman_Update(
 
     float k_bias =
         p10_pred / innovation_covariance;
+
+    filter->r_current = r_current;
+    filter->k_angle = k_angle;
+    filter->k_bias = k_bias;
 
     // State correction
     filter->angle_deg +=

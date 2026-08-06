@@ -15,6 +15,10 @@ typedef struct
     float q_bias;
     float r_measure;
     float accel_rejection_gain;
+
+    float r_current;
+    float k_angle;
+    float k_bias;
 } AngleKalmanFilter;
 
 void AngleKalman_Init(

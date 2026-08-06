@@ -25,6 +25,7 @@
 #include "mpu6050.h"
 #include <math.h>
 #include "angle_kalman.h"
+#include "quaternion_filter.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -41,6 +42,8 @@
 
 #define SAMPLE_PERIOD_S                 0.01f
 #define RAD_TO_DEG                      57.2957795f
+
+#define MAHONY_KP 2.0f
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -105,17 +108,20 @@ int main(void)
   /* USER CODE END SysInit */
 
   /* Initialize all configured peripherals */
-
   MX_GPIO_Init();
   MX_I2C1_Init();
   MX_USART2_UART_Init();
   MX_TIM2_Init();
-
   /* USER CODE BEGIN 2 */
   MPU6050_Handle imu;
   MPU6050_Measurement measurement;
   AngleKalmanFilter roll_filter;
   AngleKalmanFilter pitch_filter;
+
+  QuaternionFilter quaternion_filter;
+  float quaternion_roll_deg = 0.0f;
+  float quaternion_pitch_deg = 0.0f;
+  float quaternion_yaw_deg = 0.0f;
 
   uint8_t kalman_initialized = 0;
 
@@ -134,6 +140,8 @@ int main(void)
       Error_Handler();
   }
 
+  QuaternionFilter_Init(&quaternion_filter);
+
   if (HAL_TIM_Base_Start_IT(&htim2) != HAL_OK)
   {
       Error_Handler();
@@ -150,9 +158,9 @@ int main(void)
 
   while (1)
   {
-      /* USER CODE END WHILE */
+    /* USER CODE END WHILE */
 
-      /* USER CODE BEGIN 3 */
+    /* USER CODE BEGIN 3 */
 
       if (sample_due)
       {
@@ -227,9 +235,28 @@ int main(void)
         	      );
         	  }
 
+        	  QuaternionFilter_UpdateMahony(
+        	      &quaternion_filter,
+        	      measurement.gyro_x_dps,
+        	      measurement.gyro_y_dps,
+        	      measurement.gyro_z_dps,
+        	      measurement.accel_x_g,
+        	      measurement.accel_y_g,
+        	      measurement.accel_z_g,
+        	      MAHONY_KP,
+        	      SAMPLE_PERIOD_S
+        	  );
+
+        	  QuaternionFilter_ToEuler(
+        	      &quaternion_filter,
+        	      &quaternion_roll_deg,
+        	      &quaternion_pitch_deg,
+        	      &quaternion_yaw_deg
+        	  );
+
         	  // UART sending
 
-              char uart_buffer[280];
+              char uart_buffer[400];
 
               uint32_t timestamp_ms = HAL_GetTick();
 
@@ -242,7 +269,9 @@ int main(void)
                   "%.5f,%.5f,%.5f,"
 				  "%.5f,%.5f,%.5f,"
 				  "%.5f,%.5f,%.5f,"
-				  "%.5f,%.5f\r\n",
+				  "%.5f,%.5f,"
+				  "%.6f,%.6f,%.6f,%.6f,"
+				  "%.6f,%.6f,%.6f,%.6f,%.5f,%.5f,%.5f\r\n",
                   sample_index,
                   timestamp_ms,
                   measurement.accel_x_raw,
@@ -261,7 +290,18 @@ int main(void)
 				  pitch_acc_deg,
 				  accel_magnitude_g,
 				  roll_kf_deg,
-				  pitch_kf_deg
+				  pitch_kf_deg,
+				  roll_filter.bias_dps,
+				  pitch_filter.bias_dps,
+				  roll_filter.k_angle,
+				  pitch_filter.k_angle,
+				  quaternion_filter.qw,
+				  quaternion_filter.qx,
+				  quaternion_filter.qy,
+				  quaternion_filter.qz,
+				  quaternion_roll_deg,
+				  quaternion_pitch_deg,
+				  quaternion_yaw_deg
               );
 
               if (message_length > 0 &&
@@ -279,8 +319,8 @@ int main(void)
           }
       }
 
-      /* USER CODE END 3 */
-  }
+  /* USER CODE END 3 */
+}
 }
 
 /**
@@ -425,7 +465,7 @@ static void MX_USART2_UART_Init(void)
 
   /* USER CODE END USART2_Init 1 */
   huart2.Instance = USART2;
-  huart2.Init.BaudRate = 230400;
+  huart2.Init.BaudRate = 460800;
   huart2.Init.WordLength = UART_WORDLENGTH_8B;
   huart2.Init.StopBits = UART_STOPBITS_1;
   huart2.Init.Parity = UART_PARITY_NONE;
