@@ -4,7 +4,7 @@
 
 #define DEG_TO_RAD 0.01745329251994329577f
 #define RAD_TO_DEG 57.295779513082320876f
-#define MAHONY_ACCEL_REJECTION_GAIN 100.0f
+#define MAHONY_ACCEL_REJECTION_GAIN 1000.0f
 
 static void QuaternionFilter_PropagateRad(
     QuaternionFilter *filter,
