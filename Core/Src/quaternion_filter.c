@@ -4,6 +4,7 @@
 
 #define DEG_TO_RAD 0.01745329251994329577f
 #define RAD_TO_DEG 57.295779513082320876f
+#define MAHONY_ACCEL_REJECTION_GAIN 100.0f
 
 static void QuaternionFilter_PropagateRad(
     QuaternionFilter *filter,
@@ -112,6 +113,20 @@ void QuaternionFilter_UpdateMahony(
         az_g * az_g
     );
 
+    // Reduce accelerometer feedback when the measured magnitude differs from 1 g.
+    // During significant linear acceleration, the accelerometer is not a reliable
+    // measurement of gravity direction.
+    const float accel_deviation_g = accel_norm - 1.0f;
+
+    const float accel_weight =
+        1.0f /
+        (
+            1.0f +
+            MAHONY_ACCEL_REJECTION_GAIN *
+            accel_deviation_g *
+            accel_deviation_g
+        );
+
     if (accel_norm > 0.0f)
     {
         const float inverse_accel_norm = 1.0f / accel_norm;
@@ -141,9 +156,9 @@ void QuaternionFilter_UpdateMahony(
         const float error_z = ax * vy - ay * vx;
 
         // Feed the gravity-direction error back into the gyro rates
-        wx += kp * error_x;
-        wy += kp * error_y;
-        wz += kp * error_z;
+        wx += kp * accel_weight * error_x;
+        wy += kp * accel_weight * error_y;
+        wz += kp * accel_weight * error_z;
     }
 
     // Propagate the quaternion using the corrected angular velocity
