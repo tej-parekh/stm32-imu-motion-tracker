@@ -2,27 +2,27 @@ import csv
 import serial
 
 
-SERIAL_PORT = "/dev/cu.usbmodem11303"
-BAUD_RATE = 230400
+SERIAL_PORT = "/dev/cu.usbmodem1303"
+BAUD_RATE = 460800
 OUTPUT_FILE = "logged.csv"
 
-EXPECTED_FIELDS = 23
+EXPECTED_FIELDS = 30
 
 CSV_HEADER = [
     "sample_index",
     "timestamp_ms",
-    "ax_raw",
-    "ay_raw",
-    "az_raw",
-    "gx_raw",
-    "gy_raw",
-    "gz_raw",
-    "ax_g",
-    "ay_g",
-    "az_g",
-    "gx_dps",
-    "gy_dps",
-    "gz_dps",
+    "accel_x_raw",
+    "accel_y_raw",
+    "accel_z_raw",
+    "gyro_x_raw",
+    "gyro_y_raw",
+    "gyro_z_raw",
+    "accel_x_g",
+    "accel_y_g",
+    "accel_z_g",
+    "gyro_x_dps",
+    "gyro_y_dps",
+    "gyro_z_dps",
     "roll_acc_deg",
     "pitch_acc_deg",
     "accel_magnitude_g",
@@ -32,8 +32,14 @@ CSV_HEADER = [
     "pitch_bias_dps",
     "roll_k_angle",
     "pitch_k_angle",
+    "qw",
+    "qx",
+    "qy",
+    "qz",
+    "mahony_roll_deg",
+    "mahony_pitch_deg",
+    "mahony_yaw_deg",
 ]
-
 
 def main() -> None:
     print(f"Opening {SERIAL_PORT} at {BAUD_RATE} baud...")
@@ -79,32 +85,11 @@ def main() -> None:
                     continue
 
                 try:
-                    row = [
-                        int(fields[0]),    # sample_index
-                        int(fields[1]),    # timestamp_ms
-                        int(fields[2]),    # ax_raw
-                        int(fields[3]),    # ay_raw
-                        int(fields[4]),    # az_raw
-                        int(fields[5]),    # gx_raw
-                        int(fields[6]),    # gy_raw
-                        int(fields[7]),    # gz_raw
-                        float(fields[8]),  # ax_g
-                        float(fields[9]),  # ay_g
-                        float(fields[10]), # az_g
-                        float(fields[11]), # gx_dps
-                        float(fields[12]), # gy_dps
-                        float(fields[13]), # gz_dps
-                        float(fields[14]), # roll_acc_deg
-                        float(fields[15]), # pitch_acc_deg
-                        float(fields[16]), # accel_magnitude_g
-                        float(fields[17]), # roll_kf_deg
-                        float(fields[18]), # pitch_kf_deg
-                        float(fields[19]), # roll_bias_dps
-                        float(fields[20]), # pitch_bias_dps
-                        float(fields[21]), # roll_k_angle
-                        float(fields[22]), # pitch_k_angle
-                    ]
-
+                    row = (
+                        [int(value) for value in fields[:8]]
+                        + [float(value) for value in fields[8:]]
+                    )
+                    
                 except ValueError:
                     print(f"Ignored non-numeric line: {line}")
                     continue
