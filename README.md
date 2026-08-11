@@ -9,9 +9,9 @@ The project implements:
 
 ## Demo
 
-[![Live orientation dashboard](assets/dashboard_preview.png)](assets/dashboard_demo.mp4)
+[![Live orientation dashboard](assets/dashboard_preview.gif)](assets/dashboard_demo_compressed.mp4)
 
-**[Watch the full live demo](assets/dashboard_demo.mp4)**
+**[Watch the full live demo](assets/dashboard_demo_compressed.mp4)**
 
 The dashboard visualizes four orientation estimates streamed from the STM32 in real time: accelerometer-derived tilt, gyro-only quaternion propagation, adaptive Kalman roll/pitch with gyro-derived yaw, and the Mahony quaternion estimate.
 
@@ -150,11 +150,11 @@ A Python dashboard renders the orientation estimates streamed directly from the 
 3. Adaptive Kalman roll/pitch with gyro-derived yaw
 4. STM32 Mahony quaternion estimate
 
-Python does not rerun the embedded orientation estimators; it acts as a telemetry, analysis, and visualization layer.
+Python does not rerun the embedded orientation estimators. It acts as a telemetry, analysis, and visualization layer.
 
-[![Live orientation dashboard](assets/dashboard_preview.png)](assets/dashboard_demo.mp4)
+[![Live orientation dashboard](assets/dashboard_preview.gif)](assets/dashboard_demo_compressed.mp4)
 
-**[Watch the full dashboard demo](assets/dashboard_demo.mp4)**
+**[Watch the full dashboard demo](assets/dashboard_demo_compressed.mp4)**
 
 ## Limitations
 
