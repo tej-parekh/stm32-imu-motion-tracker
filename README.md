@@ -9,9 +9,6 @@ The project implements:
 
 ## Demo
 
-[![Live orientation dashboard](assets/dashboard_preview.gif)](assets/dashboard_demo_compressed.mp4)
-
-**[Watch the full live demo]
 https://github.com/user-attachments/assets/68981e6f-9d04-4ba9-b6d4-9307afb2d2b9
 
 The dashboard visualizes four orientation estimates streamed from the STM32 in real time: accelerometer-derived tilt, gyro-only quaternion propagation, adaptive Kalman roll/pitch with gyro-derived yaw, and the Mahony quaternion estimate.
