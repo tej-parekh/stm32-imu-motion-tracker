@@ -27,6 +27,8 @@ The dashboard visualizes four orientation estimates streamed from the STM32 in r
 - UART telemetry at 460800 baud
 - Python data logging, analysis, and live 3D visualization
 
+![STM32 Nucleo-F446RE and MPU-6050 hardware setup](assets/hardware.png)
+
 ## Architecture
 
 ```text
@@ -127,17 +129,25 @@ The final system runs all orientation estimators on the STM32 at 100 Hz and stre
 
 The adaptive Kalman filter reduces its reliance on the accelerometer during periods of significant linear acceleration. In the horizontal-shake tuning test, this substantially reduced false roll and pitch excursions compared with a fixed-measurement-noise Kalman filter.
 
-| Roll | Pitch |
-|---|---|
-| ![Horizontal shake test: roll](assets/adaptive_kalman_roll.png) | ![Horizontal shake test: pitch](assets/adaptive_kalman_pitch.png) |
+#### Roll
+
+![Horizontal shake test: roll](assets/adaptive_kalman_roll.png)
+
+#### Pitch
+
+![Horizontal shake test: pitch](assets/adaptive_kalman_pitch.png)
 
 ### Orientation Tracking
 
 Across controlled roll/pitch motions and stationary holds, the adaptive Kalman and Mahony estimates closely track one another while remaining substantially smoother than the accelerometer-only estimate. The Mahony filter additionally maintains orientation as a quaternion, allowing coupled 3D rotations to be represented without treating body-axis gyro rates as independent Euler-angle rates.
 
-| Roll | Pitch |
-|---|---|
-| ![Static orientation tracking: roll](assets/orientation_tracking_roll.png) | ![Static orientation tracking: pitch](assets/orientation_tracking_pitch.png) |
+#### Roll
+
+![Static orientation tracking: roll](assets/orientation_tracking_roll.png)
+
+#### Pitch
+
+![Static orientation tracking: pitch](assets/orientation_tracking_pitch.png)
 
 ### Live Visualization
 
@@ -150,9 +160,7 @@ A Python dashboard renders the orientation estimates streamed directly from the 
 
 Python does not rerun the embedded orientation estimators. It acts as a telemetry, analysis, and visualization layer.
 
-[![Live orientation dashboard](assets/dashboard_preview.gif)](assets/dashboard_demo_compressed.mp4)
-
-**[Watch the full dashboard demo](assets/dashboard_demo_compressed.mp4)**
+The full live demonstration is shown at the top of this README.
 
 ## Limitations
 
