@@ -184,7 +184,7 @@ Sensor calibration parameters were obtained offline and are fixed in firmware. I
 Install the analysis and visualization dependencies:
 
 ```bash
-pip install numpy matplotlib pandas pyserial
+pip install -r requirements.txt
 ```
 
 Record telemetry to a CSV:
@@ -198,5 +198,3 @@ Launch the live orientation dashboard:
 ```bash
 python live_orientation_dashboard.py
 ```
-
-Set the appropriate serial port for the Nucleo board in the Python scripts before running them.
